@@ -1,0 +1,62 @@
+﻿@using System.Reactive.Linq
+@using System.Reactive.Subjects
+
+@typeparam TElement
+
+@implements IDisposable
+
+
+@ChildContent(_element)
+
+
+@functions
+{
+    private readonly ISubject<IObservable<TElement>> _sources = new Subject<IObservable<TElement>>();
+
+    private IDisposable _sourcesConnection;
+
+    private TElement _element;
+
+
+    [Parameter]
+    public IObservable<TElement> To { set => UpdateSource(value); }
+
+    [Parameter]
+    public RenderFragment<TElement> ChildContent { get; set; }
+
+
+    private void UpdateSource(IObservable<TElement> rawSource)
+    {
+        if (_sourcesConnection == null)
+        {
+            _sourcesConnection = _sources
+                .Switch()
+                .Do(UpdateElement)
+                .Publish()
+                .Connect();
+        }
+
+        var source = rawSource == null
+            ? Observable.Never<TElement>()
+            : rawSource.Catch<TElement, Exception>(e => Observable.Empty<TElement>());
+
+        _sources.OnNext(source);
+    }
+
+    private void UpdateElement(TElement element)
+    {
+        _element = element;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _sourcesConnection?.Dispose();
+        }
+        catch
+        {
+        }
+    }
+}
