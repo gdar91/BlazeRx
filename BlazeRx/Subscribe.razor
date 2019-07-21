@@ -6,16 +6,21 @@
 @implements IDisposable
 
 
-@ChildContent(_element)
+@if (available)
+{
+    @ChildContent(element)
+}
 
 
 @functions
 {
-    private readonly ISubject<IObservable<TElement>> _sources = new Subject<IObservable<TElement>>();
+    private readonly ISubject<IObservable<TElement>> sources = new Subject<IObservable<TElement>>();
 
-    private IDisposable _sourcesConnection;
+    private IDisposable sourcesConnection;
 
-    private TElement _element;
+    private TElement element;
+
+    private bool available = false;
 
 
     [Parameter]
@@ -27,36 +32,35 @@
 
     private void UpdateSource(IObservable<TElement> rawSource)
     {
-        if (_sourcesConnection == null)
+        lock (sources)
         {
-            _sourcesConnection = _sources
-                .Switch()
-                .Do(UpdateElement)
-                .Publish()
-                .Connect();
+            if (sourcesConnection == null)
+            {
+                sourcesConnection = sources
+                    .Switch()
+                    .Do(UpdateElement)
+                    .Publish()
+                    .Connect();
+            }
         }
 
         var source = rawSource == null
             ? Observable.Never<TElement>()
             : rawSource.Catch<TElement, Exception>(e => Observable.Empty<TElement>());
 
-        _sources.OnNext(source);
+        sources.OnNext(source);
     }
 
-    private void UpdateElement(TElement element)
+    private void UpdateElement(TElement newElement)
     {
-        _element = element;
+        element = newElement;
+        available = true;
         StateHasChanged();
     }
 
     public void Dispose()
     {
-        try
-        {
-            _sourcesConnection?.Dispose();
-        }
-        catch
-        {
-        }
+        using (var resource = sourcesConnection)
+        { }
     }
 }
